@@ -10,6 +10,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, classification_report
 from mlflow.models.signature import infer_signature
+from mlflow.exceptions import MlflowException
 
 # === CONFIGURATION ===
 DATA_DIR = "data"
@@ -18,6 +19,8 @@ MLFLOW_TRACKING_URI = "http://34.45.141.223:8100"
 MLFLOW_EXPERIMENT_NAME = "stock_movement_experiment"
 MODEL_FILENAME = "stock_model.pkl"
 WEIGHTS_FILENAME = "stock_model_weights.pkl"
+REGISTERED_MODEL_NAME = "stock_rf_model"
+PROMOTION_THRESHOLD = 0.70
 
 # === SETUP MLFLOW ===
 mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
@@ -54,9 +57,8 @@ def process_csvs_to_parquet():
     return full_df
 
 
-# === STEP 2: LOAD FROM PARQUET & FETCH FEATURES ===
+# === STEP 2: LOAD PARQUET, TRAIN & REGISTER MODEL ===
 def train_and_log_model_from_parquet():
-    # Load entity data
     entity_df = pd.read_parquet(PARQUET_OUTPUT)
 
     if "event_timestamp" not in entity_df.columns:
@@ -67,7 +69,6 @@ def train_and_log_model_from_parquet():
     else:
         entity_df["stock_id"] = entity_df["stock_id"].astype(str)
 
-    # Fetch features from the same parquet (simulate Feast I/O)
     feature_df = entity_df.copy()
 
     if "target" not in feature_df.columns:
@@ -81,52 +82,67 @@ def train_and_log_model_from_parquet():
     print("Target distribution:\n", y.value_counts())
     print("Missing values:\n", X.isnull().sum())
 
-    # Train/test split
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.2, random_state=42
     )
 
-    # Train model
-    with mlflow.start_run():
+    # Train and log to MLflow
+    with mlflow.start_run() as run:
         clf = RandomForestClassifier(
-        n_estimators=50,       
-        max_depth=10,         
-        min_samples_leaf=5,   
-        random_state=42,
-        n_jobs=-1              # utilize all CPU cores
+            n_estimators=50,
+            max_depth=10,
+            min_samples_leaf=5,
+            random_state=42,
+            n_jobs=-1,
         )
         clf.fit(X_train, y_train)
         y_pred = clf.predict(X_test)
         accuracy = accuracy_score(y_test, y_pred)
 
-        # Save model & weights
+        # Save locally
         joblib.dump(clf, MODEL_FILENAME)
         joblib.dump(clf.feature_importances_, WEIGHTS_FILENAME)
 
-        # Log params & metrics
+        # Log parameters, metrics, and artifacts
         mlflow.log_param("model_type", "RandomForest")
-        mlflow.log_param("n_estimators", 100)
+        mlflow.log_param("n_estimators", 50)
         mlflow.log_param("random_state", 42)
         mlflow.log_metric("accuracy", accuracy)
-
-        # Inferred signature for deployment
-        signature = infer_signature(X_train, clf.predict(X_train))
-        input_example = X_train.iloc[:1]
-
-        # Log model with signature
-        mlflow.sklearn.log_model(
-            sk_model=clf,
-            name="stock_rf_model",
-            signature=signature,
-            input_example=input_example,
-        )
-
-        # Log artifacts
         mlflow.log_artifact(MODEL_FILENAME)
         mlflow.log_artifact(WEIGHTS_FILENAME)
 
+        # Signature and input example
+        signature = infer_signature(X_train, clf.predict(X_train))
+        input_example = X_train.iloc[:1]
+
+        # Log model to MLflow
+        mlflow.sklearn.log_model(
+            sk_model=clf,
+            artifact_path="model",
+            signature=signature,
+            input_example=input_example,
+            registered_model_name=REGISTERED_MODEL_NAME,
+        )
+
         print(f"✅ Accuracy: {accuracy:.4f}")
-        print(f"🎯 Run ID: {mlflow.active_run().info.run_id}")
+        print(f"🎯 Run ID: {run.info.run_id}")
+
+        # === OPTIONAL: Auto-promote to Production ===
+        if accuracy >= PROMOTION_THRESHOLD:
+            try:
+                from mlflow.tracking import MlflowClient
+
+                client = MlflowClient()
+                latest_version = client.get_latest_versions(REGISTERED_MODEL_NAME, stages=["None"])[-1]
+                client.transition_model_version_stage(
+                    name=REGISTERED_MODEL_NAME,
+                    version=latest_version.version,
+                    stage="Production",
+                    archive_existing_versions=True,
+                )
+                print(f"🚀 Model v{latest_version.version} promoted to Production.")
+            except MlflowException as e:
+                print("⚠️ Failed to promote model to Production:", e)
 
 
 # === MAIN ===
@@ -134,5 +150,5 @@ if __name__ == "__main__":
     print("📥 Processing all CSVs into feature parquet...")
     process_csvs_to_parquet()
 
-    print("🚀 Training and logging model to MLflow...")
+    print("🚀 Training and logging model to MLflow (with registry)...")
     train_and_log_model_from_parquet()
