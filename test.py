@@ -48,17 +48,21 @@ class TestStockModel(unittest.TestCase):
 
     def test_rolling_avg_10_feature(self):
         for idx in self.sample_df.index:
-            window = self.df_all.loc[:idx].tail(10)["close"]
-            expected = window.mean()
-            actual = self.df_all.loc[idx, "rolling_avg_10"]
-            self.assertAlmostEqual(actual, expected, places=5, msg=f"Mismatch in rolling_avg_10 at {idx}")
+            # Get exact timestamp row
+            ts = idx
+            # Get previous 10 rows up to and including this one
+            window = self.df_all[self.df_all.index <= ts].tail(10)
+            expected = window["close"].mean()
+            actual = self.df_all.loc[ts, "rolling_avg_10"]
+            self.assertAlmostEqual(actual, expected, places=5, msg=f"Mismatch in rolling_avg_10 at {ts}")
 
     def test_volume_sum_10_feature(self):
         for idx in self.sample_df.index:
-            window = self.df_all.loc[:idx].tail(10)["volume"]
-            expected = window.sum()
-            actual = self.df_all.loc[idx, "volume_sum_10"]
-            self.assertAlmostEqual(actual, expected, places=5, msg=f"Mismatch in volume_sum_10 at {idx}")
+            ts = idx
+            window = self.df_all[self.df_all.index <= ts].tail(10)
+            expected = window["volume"].sum()
+            actual = self.df_all.loc[ts, "volume_sum_10"]
+            self.assertAlmostEqual(actual, expected, places=5, msg=f"Mismatch in volume_sum_10 at {ts}")
 
 
 if __name__ == "__main__":
