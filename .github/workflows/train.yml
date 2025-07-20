@@ -85,7 +85,7 @@ jobs:
               echo " - $file"
             done
 
-            echo "📄 Preview of first CSV file (${csv_files[0]}):"
+            echo "Preview of first CSV file (${csv_files[0]}):"
             head -n 6 "${csv_files[0]}"  # First 5 rows + header
           else
             echo "❌ No CSV files found in the data/ directory!"
