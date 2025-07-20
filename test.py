@@ -47,21 +47,24 @@ class TestStockModel(unittest.TestCase):
         self.assertGreater(acc, 0.3, "Model accuracy on 5-sample test is below 30%")
 
     def test_rolling_avg_10_feature(self):
-        for idx in self.sample_df.index:
-            # Get exact timestamp row
-            ts = idx
-            # Get previous 10 rows up to and including this one
+        for ts, row in self.sample_df.iterrows():
+            # Get the 10 previous rows including current timestamp
             window = self.df_all[self.df_all.index <= ts].tail(10)
             expected = window["close"].mean()
-            actual = self.df_all.loc[ts, "rolling_avg_10"]
+
+            # Avoid ambiguous Series by using the actual row value
+            actual = row["rolling_avg_10"]
+
             self.assertAlmostEqual(actual, expected, places=5, msg=f"Mismatch in rolling_avg_10 at {ts}")
 
+
     def test_volume_sum_10_feature(self):
-        for idx in self.sample_df.index:
-            ts = idx
+        for ts, row in self.sample_df.iterrows():
             window = self.df_all[self.df_all.index <= ts].tail(10)
             expected = window["volume"].sum()
-            actual = self.df_all.loc[ts, "volume_sum_10"]
+
+            actual = row["volume_sum_10"]
+
             self.assertAlmostEqual(actual, expected, places=5, msg=f"Mismatch in volume_sum_10 at {ts}")
 
 
