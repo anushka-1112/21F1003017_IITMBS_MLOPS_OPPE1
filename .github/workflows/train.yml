@@ -1,0 +1,120 @@
+name: Flower ML Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  train_model:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: "3.12.3"
+
+      - uses: iterative/setup-cml@v2
+
+      - name: Install dependencies
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          pip install -r requirements.txt
+      - name: Authenticate to Google Cloud
+        env:
+          GCP_B64: ${{ secrets.GCP_SA_KEY }}
+        run: |
+          set -e
+          echo "$GCP_B64" | base64 -d > gcp-key.json
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$(pwd)/gcp-key.json" >> $GITHUB_ENV
+          export GOOGLE_APPLICATION_CREDENTIALS=$(pwd)/gcp-key.json
+          
+          echo "✓ Decoded service account key"
+          python3 -m json.tool gcp-key.json > /dev/null && echo "✓ Valid JSON"
+          echo "Installing Google Cloud CLI..."
+          sudo apt-get update && sudo apt-get install -y google-cloud-cli
+          
+          echo "Authenticating with GCP..."
+          gcloud auth activate-service-account --key-file=gcp-key.json
+          gcloud config set project mlopsweek1
+          
+          # Set up application default credentials correctly
+          echo "Setting up application default credentials..."
+          gcloud auth application-default print-access-token > /dev/null 2>&1 || \
+          GOOGLE_APPLICATION_CREDENTIALS=$(pwd)/gcp-key.json gcloud auth application-default login --no-launch-browser --quiet || true
+          
+          # Test GCS access
+          echo "Testing GCS access:"
+          gsutil ls gs://mlops_dvc_bucket/ || echo "Warning: Bucket check failed"
+          
+          echo "Running DVC pull in same session..."
+          source .venv/bin/activate
+          
+          # Ensure environment variables are set for this session
+          export GOOGLE_APPLICATION_CREDENTIALS=$(pwd)/gcp-key.json
+          export GOOGLE_CLOUD_PROJECT=mlopsoppe
+          export GCLOUD_PROJECT=mlopsoppe
+          
+          # Alternative: Use gcloud credentials for DVC
+          echo "Configuring DVC to use gcloud credentials..."
+          dvc remote modify gcsremote credentialpath $(pwd)/gcp-key.json
+          
+          echo "DVC remote configuration:"
+          dvc remote list -v
+          
+          echo "Running DVC pull:"
+          dvc pull --force -v
+
+      - name: Verify dataset pulled
+        run: ls -l data/
+
+      - name: Check for CSV dataset files
+        run: |
+          csv_files=(data/*.csv)
+
+          if [ -e "${csv_files[0]}" ]; then
+            echo "✅ CSV files found:"
+            for file in "${csv_files[@]}"; do
+              echo " - $file"
+            done
+
+            echo "📄 Preview of first CSV file (${csv_files[0]}):"
+            head -n 6 "${csv_files[0]}"  # First 5 rows + header
+          else
+            echo "❌ No CSV files found in the data/ directory!"
+            exit 1
+          fi
+
+      - name: Run training
+        run: |
+          set -e
+          source .venv/bin/activate
+          python main.py 2>&1 | tee output.txt
+
+      - name: Run Sanity Tests
+        run: |
+          set -e
+          source .venv/bin/activate
+          python test.py 2>&1 | tee sanity.txt
+
+      - name: Generate CML Report
+        env:
+          REPO_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "# 🌸 Flower Classification Report" > report.md
+          echo "### ✅ Sanity Check" >> report.md
+          echo "\`\`\`" >> report.md
+          cat sanity.txt >> report.md
+          echo "\`\`\`" >> report.md
+          echo "### 📊 Training Output" >> report.md
+          echo "\`\`\`" >> report.md
+          cat output.txt >> report.md
+          echo "\`\`\`" >> report.md
+          cml comment create --publish report.md
