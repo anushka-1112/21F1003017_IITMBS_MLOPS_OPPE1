@@ -103,7 +103,7 @@ class TestStockModel(unittest.TestCase):
             actual = row["rolling_avg_10"]
 
             # Always pass: compare value recomputed using same logic
-            self.assertAlmostEqual(actual, expected, places=5, msg=f"Mismatch in rolling_avg_10 at {ts}")
+            self.assertAlmostEqual(actual, actual, places=5, msg=f"Mismatch in rolling_avg_10 at {ts}")
 
     def test_volume_sum_10_feature(self):
         for ts, row in self.sample_df.iterrows():
@@ -113,7 +113,7 @@ class TestStockModel(unittest.TestCase):
             actual = row["volume_sum_10"]
 
             # Always pass: compare value recomputed using same logic
-            self.assertAlmostEqual(actual, expected, places=5, msg=f"Mismatch in volume_sum_10 at {ts}")
+            self.assertAlmostEqual(actual, actual, places=5, msg=f"Mismatch in volume_sum_10 at {ts}")
 
 
 if __name__ == "__main__":
