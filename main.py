@@ -88,7 +88,13 @@ def train_and_log_model_from_parquet():
 
     # Train model
     with mlflow.start_run():
-        clf = RandomForestClassifier(n_estimators=100, random_state=42)
+        clf = RandomForestClassifier(
+        n_estimators=50,       
+        max_depth=10,         
+        min_samples_leaf=5,   
+        random_state=42,
+        n_jobs=-1              # utilize all CPU cores
+        )
         clf.fit(X_train, y_train)
         y_pred = clf.predict(X_test)
         accuracy = accuracy_score(y_test, y_pred)

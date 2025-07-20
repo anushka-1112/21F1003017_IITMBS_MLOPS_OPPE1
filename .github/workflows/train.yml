@@ -1,4 +1,4 @@
-name: Flower ML Pipeline
+name: Stock Data ML Pipeline
 
 on:
   push:
@@ -108,7 +108,7 @@ jobs:
         env:
           REPO_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "# 🌸 Flower Classification Report" > report.md
+          echo "# Stock Data Classification Report" > report.md
           echo "### ✅ Sanity Check" >> report.md
           echo "\`\`\`" >> report.md
           cat sanity.txt >> report.md
