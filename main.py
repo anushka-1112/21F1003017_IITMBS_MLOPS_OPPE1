@@ -20,7 +20,7 @@ MLFLOW_EXPERIMENT_NAME = "stock_movement_experiment"
 MODEL_FILENAME = "stock_model.pkl"
 WEIGHTS_FILENAME = "stock_model_weights.pkl"
 REGISTERED_MODEL_NAME = "stock_rf_model"
-PROMOTION_THRESHOLD = 0.70
+PROMOTION_THRESHOLD = 0.50
 
 # === SETUP MLFLOW ===
 mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
